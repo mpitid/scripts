@@ -1,0 +1,6 @@
+#!/bin/zsh
+
+OUT=$(du -xshc $@)
+
+echo "$OUT" | egrep '^[0-9]+(\.[0-9]+)?M' | sort -g
+echo "$OUT" | egrep '^[0-9]+(\.[0-9]+)?G' | sort -g
