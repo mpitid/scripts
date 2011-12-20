@@ -1,0 +1,48 @@
+#!/bin/bash
+# Simple wrapper around cpufreq-set.
+# `cpufreq free` sets the ondemand governor.
+# `cpufreq lock [0..Number of frequency steps]` sets both cpu cores to the
+#                                               selected value.
+# `cpufreq preset` will set a custom preset for my laptop.
+
+FREQS=($(cpufreq-info \
+       | sed -n '/available frequency steps/ { s/.*://; s/ //g; s/,/ /g; p;q}' \
+       | tac -s ' '))
+# For some reason cpufreq-info reports the last frequency twice,
+# hence -2 instead of -1.
+MAXF=$((${#FREQS} - 2))
+
+
+usage() {
+    echo "usage: $(basename $0) { free | lock [0..$MAXF] }"
+    exit 1
+}
+
+
+# If we are not root and sudo is installed, use it.
+if [[ 0 -ne `id -u` ]] && `which sudo &>/dev/null`; then
+    SUDO=sudo
+else
+    SUDO=
+fi
+
+case $1 in
+    free)
+        $SUDO cpufreq-set --related --governor ondemand
+        ;;
+    lock)
+        F=${2:-0}
+        (( F > MAXF )) && usage
+        $SUDO cpufreq-set --related --freq ${FREQS[$F]}
+        ;;
+    preset)
+        #$SUDO cpufreq-set --cpu 0 --max 2.0GHz
+        $SUDO cpufreq-set --cpu 0 --max 1.6GHz
+        $SUDO cpufreq-set --cpu 1 --max 1.2GHz
+        $SUDO cpufreq-set --related --governor ondemand
+        ;;
+    *)
+        usage
+        ;;
+esac
+
