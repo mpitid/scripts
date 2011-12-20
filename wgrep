@@ -1,0 +1,145 @@
+#!/usr/bin/env python
+
+"""\
+wgrep is a combination of wget and grep. You can use it to extract hyperlinks
+from webpages.
+"""
+
+import os
+import re
+import sys
+import socket
+import urllib
+
+from lxml import etree
+from optparse import OptionParser
+
+
+class Opener(urllib.FancyURLopener):
+    version = 'Mozilla/5.0'
+
+urllib._urlopener = Opener()
+
+### Extract the necessary information.
+
+def anchors(html):
+    """Return the content of the HREF attribute as well as the text content of
+    an ANCHOR element."""
+    for elem in html.iter('a'):
+        if 'href' in elem.attrib:
+            yield (elem.attrib['href'], elem.text or '')
+
+def images(html):
+    """Return the content of the SRC attribute of an IMG element."""
+    for elem in html.iter('img'):
+        if 'src' in elem.attrib:
+            yield elem.attrib['src']
+
+def hybrid(html):
+    """Return the content of the HREF attribute as well as the SRC attribute of
+    the first child element contained in an ANCHOR element."""
+    for elem in html.iter('a'):
+        if len(elem) and 'href' in elem.attrib and elem[0].tag == 'img':
+            yield (elem.attrib['href'], elem[0].attrib['src'])
+
+
+### Filter the extracted information.
+
+def filter_images(rgx, data):
+    """Match on the provided value and return it if successful."""
+    return (path for path in data if rgx.search(path))
+
+def filter_anchors(rgx, data):
+    """Match on the content of the first provided value and, as a fallback, on
+    the content of the second value. If any of the two succeeds return the
+    first value."""
+    for href, text in data:
+        if rgx.search(href) or rgx.search(text):
+            yield href
+
+MODES = {
+    'anchors': (anchors, filter_anchors),
+    'hybrid':  (hybrid, filter_anchors),
+    'images':  (images, filter_images),
+    }
+
+def main(argv):
+    opts, args = parse_cli(argv)
+    if opts.list:
+        list_modes()
+        return 0
+    rgx, url = args
+    rgx = re.compile(rgx, re.I)
+    html = wget(url)
+    base = base_url(html)
+    if not base:
+        base = base_name(url)
+    gen, cons = MODES[opts.mode]
+    for match in cons(rgx, gen(html)):
+        print normalize_href(base, match)
+    return 0
+
+def parse_cli(argv):
+    parser = OptionParser(
+            version="0.2", usage="%prog [options] <pattern> <url>",
+            description=__doc__)
+    add = parser.add_option
+    add('-m', '--mode', metavar='MODE',
+        choices=MODES.keys(), default='anchors',
+        help='select mode of operation (default: %default)')
+    add('-l', '--list', action='store_true',
+        help='list available modes of operation')
+    opts, args = parser.parse_args(argv[1:])
+    if not opts.list and len(args) != 2:
+        parser.error("You need to specify a match PATTERN and a URL")
+    return opts, args
+
+def list_modes():
+    print "\n   Available modes and their descriptions\n"
+    for key, (gen, cons) in sorted(MODES.iteritems()):
+        print "%s\n << %s\n >> %s\n" % (key, gen.__doc__, cons.__doc__)
+
+
+### Various helper functions.
+
+def wget(url):
+    """Retrieve and parse a HTML page from URL, return the parsed object."""
+    socket.setdefaulttimeout(20)
+    page = urllib.urlopen(url)
+    return etree.parse(page, etree.HTMLParser())
+
+def base_url(html):
+    """Return the base url element of an HTML page or None if not present."""
+    base = html.find('head/base')
+    if base:
+        return base.attrib['href']
+    return None
+
+def base_name(url):
+    """Try to return the correct base name for a URL."""
+    if url.endswith('/'):
+        return url
+    # If the last component has a suffix, it is a strong indicator
+    # that it is not a path component.
+    base, name = os.path.dirname(url), os.path.basename(url)
+    _root, extn = os.path.splitext(name)
+    if extn:
+        return base
+    return url
+
+# We only care about http/ftp/magnet urls.
+URL_SCHEME = re.compile('^(ht|f)tps?://|^magnet:', re.I)
+URL_ROOT = re.compile('^(?:(?:ht|f)tps?://)?([^/]+)', re.I)
+def normalize_href(base, href):
+    """Try to convert relative links to absolute URLs."""
+    if URL_SCHEME.match(href):
+        return href
+    if href.startswith('/'):
+        root = URL_ROOT.match(base).group(1)
+        return '/'.join((root, href.lstrip('/')))
+    return '/'.join((base.rstrip('/'), href))
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
+
