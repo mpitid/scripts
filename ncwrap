@@ -1,0 +1,51 @@
+#!/bin/zsh
+#
+# Wrappers around netcat and pv, for easy/fancy copying of files
+# between hosts.
+
+fail() {
+    echo $@
+    exit 1
+}
+
+prompt() {
+    FILE=$1
+    if [[ -e $FILE ]]; then
+        read ans\?"File '$FILE' exists, overwrite (y/N)? "
+        [[ y = ${ans:l} || yes = ${ans:l} ]]
+    fi
+    return $?
+}
+
+NC_PORT=5050
+
+nc_send() {
+    FILE=$1
+    PORT=${2:-$NC_PORT}
+    [[ -z $FILE ]] && fail "usage: $0 file [port]"
+    size=$(stat -c %s $FILE)
+    { echo $size; pv -per -s $size $FILE } | nc -l -p $PORT -q 0
+}
+
+nc_get() {
+    HOST=$1
+    FILE=$2
+    PORT=${3:-$NC_PORT}
+    [[ -z $HOST || -z $FILE ]] && fail "usage: $0 host file [port]"
+    if prompt $FILE ; then
+         nc $HOST $PORT | { read size; pv -per -s $size > $FILE }
+     else
+         echo "Aborting"
+     fi
+}
+
+case $1 in
+    -g|--get)
+      shift
+      nc_get $@
+      ;;
+   -s|--send)
+      shift
+      nc_send $@
+esac
+
