@@ -1,0 +1,26 @@
+#!/bin/zsh
+# Retrieve and extract zip/rar archives.
+
+## wget the file, parse the retrieved filename, extract the contents
+## of the archive and remove it.
+retrieve_unpack() {
+    ## Duplicate wget's stderr to stdout for parsing.
+    filename=$(wget --content-disposition $1 2>&1 | tee >(parse_filename) 1>&2)
+    case $(file -b $filename | cut -f 1 -d ' ') in
+        Zip) unzip -B $filename ;;
+        RAR) unrar x $filename ;;
+        *)  return 1
+    esac && rm $filename
+}
+
+## Older versions of wget enclosed filenames on backticks and quotes,
+## uncomment the older command if such versions are present.
+parse_filename() {
+    # Or with `setopt rcquotes`:  'foo''bar' -> foo'bar
+    #sed -rn "s/^Saving to: \`([^']+)'$/\1/p")
+    sed -rn "s/^Saving to: “(.+)”$/\\1/p" $@
+}
+
+for URL in $@; do
+    retrieve_unpack $URL
+done
