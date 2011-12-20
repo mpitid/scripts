@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+
+"""Calculate a bunch of different checksums at once."""
+
+import sys
+import zlib
+import hashlib
+import os.path
+
+from optparse import OptionParser, OptionValueError
+
+
+def hashsum(function):
+    """Create a hashlib-like wrapper class for the specified function."""
+    class C(object):
+        """Wrapper around zlib-like 32-bit checksum functions, providing
+        a hashlib-like interface."""
+        def __init__(self, data=''):
+            self.__value = 0
+            if data:
+                self.update(data)
+        def update(self, data):
+            self.__value = function(data, self.__value)
+        def digest(self):
+            return str(self.__value)
+        def hexdigest(self):
+            return "%08x" % self.__value
+        def __repr__(self):
+            return self.hexdigest()
+        def __str__(self):
+            return self.hexdigest()
+    return C
+
+CRC32 = hashsum(zlib.crc32)
+ADL32 = hashsum(zlib.adler32)
+
+
+HASHTBL = {
+        'md5':     hashlib.md5,
+        'sha1':    hashlib.sha1,
+        'sha224':  hashlib.sha224,
+        'sha256':  hashlib.sha256,
+        'sha384':  hashlib.sha384,
+        'sha512':  hashlib.sha512,
+        'crc32':   CRC32,
+        'adler32': ADL32,
+    }
+
+
+def parse_cli(argv):
+    """Parse command line arguments."""
+    description = "Calculate a bunch of checksums at once."
+    parser = OptionParser(
+            version="0.1",
+            usage="%prog [options] file(s)",
+            description=description)
+    add = parser.add_option
+
+    valid_checksums = ', '.join(sorted(HASHTBL))
+    def cb_checksums(option, opt_str, value, parser):
+        values = list(unique(c.strip() for c in value.lower().split(',')))
+        for val in values:
+            if not val or val not in HASHTBL:
+                raise OptionValueError('Invalid checksum %r (choose one of %s)'\
+                        % (val, valid_checksums))
+        parser.values.checksums = values
+
+    # TODO: Still not very satisfied with the way this option is handled.
+    add('-c', '--checksum',
+        metavar='CHECKSUM',
+        dest='checksums',
+        type='string',
+        default=['md5'],
+        action='callback',
+        callback=cb_checksums,
+        help='a comma separated list of checksum algorithms. Valid values are'\
+             ' %s (default %%default)' % valid_checksums)
+
+    add('-r', '--recursive',
+        dest='recursive',
+        action='store_true',
+        help='examine directories recursively')
+
+    add('-b', '--bufsize',
+        metavar='BUFSIZE',
+        dest='bufsize',
+        type=int,
+        default=4096,
+        help='size of file read buffer in bytes (default %default)')
+
+    add('-u', '--unique',
+        dest='unique',
+        action='store_true',
+        help='do not print duplicate entries (does not detect symlinks)')
+
+    add('-n', '--no-cache',
+        dest='cache',
+        action='store_false',
+        default=True,
+        help='disable filename cache (may grow large on huge file lists)')
+
+    opts, args = parser.parse_args(argv[1:])
+
+    if opts.unique and not opts.cache:
+        parser.error('Options --unique and --no-cache are mutually exclusive.')
+    if not args:
+        # TODO: Read stdin in this case.
+        parser.error('You have to supply at least one file.')
+
+    return opts, args
+
+
+def unique(values):
+    """Generate a new set of values, in the same order, with no duplicates."""
+    seen = set()
+    for value in values:
+        if value not in seen:
+            yield value
+            seen.add(value)
+
+
+def calculate(filename, hashes, bufsize):
+    """Calculate different checksums for a file.
+
+    filename -- Full path to the file.
+    hashes   -- A list of hash classes that will produce a checksum.
+    bufsize  -- How many bytes to read each time.
+
+    Return a list of hex digests representing each requested checksum.
+    """
+    assert bufsize > 0
+    hashes = [hash() for hash in hashes]
+    fd = open(filename, 'rb')
+    try:
+        while True:
+            data = fd.read(bufsize)
+            for hash in hashes:
+                hash.update(data)
+            if not data: # EOF
+                break
+        return [hash.hexdigest() for hash in hashes]
+    finally:
+        fd.close()
+
+
+def main(argv):
+    options, files = parse_cli(argv)
+    cache = {}
+    hashes = [HASHTBL[c] for c in options.checksums]
+
+    def walk(filename):
+        # Compute and print requested checksums for each regular
+        # file (or symlink to a regular file). A cache is kept,
+        # in case the user provided the same file multiple times.
+        # TODO: Maybe resolve symlinks and avoid calculating them
+        # multiple times as well (e.g. with os.path.realpath).
+        digests = None
+        if os.path.isfile(filename):
+            if filename not in cache:
+                try:
+                    digests = calculate(filename, hashes, options.bufsize)
+                except (IOError, OSError), err:
+                    print >> sys.stderr, 'Error processing file %r (%s)'\
+                            % (filename, err)
+                    return
+                if options.cache:
+                    cache[filename] = digests
+            else:
+                if not options.unique:
+                    digests = cache[filename]
+        elif options.recursive and os.path.isdir(filename):
+            for (dirpath, dirnames, filenames) in os.walk(filename):
+                for fname in filenames:
+                    walk(os.path.join(dirpath, fname))
+            return
+        # Everything else is ignored.
+        if digests:
+            for d in digests:
+                print d,
+            print filename
+            sys.stdout.flush()
+
+    for f in files:
+        walk(f)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
