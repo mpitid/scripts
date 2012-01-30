@@ -1,0 +1,6 @@
+#!/bin/zsh
+
+for file in $@; do
+  sqlite3 $file 'VACUUM;'
+done
+
