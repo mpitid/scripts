@@ -13,12 +13,9 @@ retrieve_unpack() {
     esac && rm $filename
 }
 
-## Older versions of wget enclosed filenames on backticks and quotes,
-## uncomment the older command if such versions are present.
+# Some versions of wget use `' quotes while others “”, so account for both.
 parse_filename() {
-    # Or with `setopt rcquotes`:  'foo''bar' -> foo'bar
-    #sed -rn "s/^Saving to: \`([^']+)'$/\1/p")
-    sed -rn "s/^Saving to: “(.+)”$/\\1/p" $@
+    sed -rn "s/^Saving to: [“\`]([^”']+)[”']$/\\1/p" $@
 }
 
 for URL in $@; do
