@@ -4,9 +4,10 @@
 acpi -b | sed -rn '/^Battery 0:/ {
  s/^Battery.*: //
  s/,//g
- s/Unknown/=/
+ s/Unknown/?/
  s/Discharging/-/
  s/Charging/+/
+ s/Full/=/
  s/remaining//
  s/until charged//
  # Skip seconds.
