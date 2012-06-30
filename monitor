@@ -1,0 +1,23 @@
+#!/bin/zsh
+# Monitor a directory for modifications on files that match a given
+# regular expression and execute an appropriate command at each event.
+#
+# For example, to update a local ikiwiki whenever a file is changed, run:
+
+#   monitor path/to/wiki '\.mkdn$|\.mdwn$' ikiwiki --setup ~/wiki.setup
+#
+
+TARGET="$1"
+PATTERN="$2"
+COMMAND=("${@:3}")
+
+[[ $# -lt 3 ]] && { echo "usage: $0 <watched-dir> <file-pattern> <command>"; exit 1 }
+
+#EVENTS=(create delete modify move)
+EVENTS=(modify delete)
+
+inotifywait -r -m -e ${(j.,.)EVENTS} --format "%w%f" $TARGET | egrep --line-buffered "$PATTERN" | while read file; do
+  echo "event: $file"
+  $COMMAND
+done
+
