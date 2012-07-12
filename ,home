@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ -d .git.off ]; then
+  mv ~/.git.off ~/.git || exit 1
+  echo Home VCS enabled
+else
+  mv ~/.git ~/.git.off || exit 1
+  echo Home VCS disabled
+fi
+
