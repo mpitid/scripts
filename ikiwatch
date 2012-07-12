@@ -1,0 +1,9 @@
+#!/bin/bash
+
+SETUP="$1"
+WPATH="${2:-.}"
+
+[[ -z "$@" ]] && { echo "usage: $0 <setup file> [<wiki path> = .]"; exit 1; }
+
+monitor "$WPATH" '\.mkdn$|\.mdwn$' ikiwiki --setup "$SETUP"
+
