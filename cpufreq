@@ -1,9 +1,11 @@
 #!/bin/bash
 # Simple wrapper around cpufreq-set.
 # `cpufreq free` sets the ondemand governor.
-# `cpufreq lock [0..Number of frequency steps]` sets both cpu cores to the
+# `cpufreq lock [0..Number of frequency steps]` sets all cpu cores to the
 #                                               selected value.
 # `cpufreq preset` will set a custom preset for my laptop.
+
+PRESETS=(1.6GHz 1.2GHz)
 
 FREQS=($(cpufreq-info \
        | sed -n '/available frequency steps/ { s/.*://; s/ //g; s/,/ /g; p;q}' \
@@ -12,9 +14,8 @@ FREQS=($(cpufreq-info \
 # hence -2 instead of -1.
 MAXF=$((${#FREQS} - 2))
 
-
 usage() {
-    echo "usage: $(basename $0) { free | lock [0..$MAXF] }"
+    echo "usage: $(basename $0) { free | lock [0..$MAXF] | preset | core [<id> [<freq>]] }"
     exit 1
 }
 
@@ -28,17 +29,28 @@ fi
 
 case $1 in
     free)
+        echo "Unlocking frequency scaling"
+        $SUDO cpufreq-set --related --max ${FREQS[$MAXF]}
         $SUDO cpufreq-set --related --governor ondemand
         ;;
     lock)
         F=${2:-0}
         (( F > MAXF )) && usage
+        echo "Locking frequencies to ${FREQS[$F]}"
         $SUDO cpufreq-set --related --freq ${FREQS[$F]}
         ;;
     preset)
-        #$SUDO cpufreq-set --cpu 0 --max 2.0GHz
-        $SUDO cpufreq-set --cpu 0 --max 1.6GHz
-        $SUDO cpufreq-set --cpu 1 --max 1.2GHz
+        echo "Limiting maximum frequencies to ${PRESETS[@]}"
+        for c in $(seq 0 $((${#PRESETS[@]}-1))); do
+            $SUDO cpufreq-set --cpu $c --max ${PRESETS[$c]}
+        done
+        $SUDO cpufreq-set --related --governor ondemand
+        ;;
+    core)
+        c=${2:-0}
+        f=${3:-$MAXF}
+        echo "Limiting maximum frequency of core $c to ${FREQS[$f]}"
+        $SUDO cpufreq-set --cpu $c --max ${FREQS[$f]}
         $SUDO cpufreq-set --related --governor ondemand
         ;;
     *)
