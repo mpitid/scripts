@@ -58,17 +58,17 @@ overwrite $DST || fail "Choose a different target filename."
 case ${TYPE:l} in
     mp3)
         require lame
-        [ -z $@ ] && set -- -h --preset medium
+        [[ -z $@ ]] && set -- -h --preset medium
         lame $FIFO -o $DST $@ &
         ;;
     ogg)
         require oggenc
-        [ -z $@ ] && set -- -q 2
+        [[ -z $@ ]] && set -- -q 2
         oggenc $FIFO -o $DST $@ &
         ;;
     flac)
         require flac
-        [ -z $@ ] && set -- -8 -f
+        [[ -z $@ ]] && set -- -8 -f
         flac $FIFO -o $DST $@ &
         ;;
     wav)
