@@ -132,6 +132,7 @@ URL_SCHEME = re.compile('^(ht|f)tps?://|^magnet:', re.I)
 URL_ROOT = re.compile('^(?:(?:ht|f)tps?://)?([^/]+)', re.I)
 def normalize_href(base, href):
     """Try to convert relative links to absolute URLs."""
+    href = href.strip()
     if URL_SCHEME.match(href):
         return href
     if href.startswith('/'):
