@@ -15,7 +15,8 @@ retrieve_unpack() {
 
 # Some versions of wget use `' quotes while others “”, so account for both.
 parse_filename() {
-    sed -rn "s/^Saving to: [“\`]([^”']+)[”']$/\\1/p" $@
+    #sed -rn "s/^Saving to: [“\`]([^”']+)[”']$/\\1/p" $@
+    sed -rn "s/^Saving to: .(.+).$/\\1/p" $@
 }
 
 for URL in $@; do
